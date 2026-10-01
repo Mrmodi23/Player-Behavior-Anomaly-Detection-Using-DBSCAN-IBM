@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Player Behavior Anomaly Detection Using DBSCAN | Telemetry Analytics</title>
+    <meta name="description" content="College semester project demonstrating unsupervised DBSCAN clustering for in-game movement coordinate telemetry anomaly detection and automated aim isolation.">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Chart.js & Zoom Plugin -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    
+    <!-- Application CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="app-layout">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-brand">
+                <div class="brand-icon">
+                    <i class="fa-solid fa-crosshairs"></i>
+                </div>
+                <div class="brand-text">
+                    <span class="brand-title">AEGIS<span class="accent-text">ML</span></span>
+                    <span class="brand-subtitle">DBSCAN TELEMETRY GUARD</span>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+                <div class="nav-section-title">ANALYTICS SUITE</div>
+                <button class="nav-item active" data-page="dashboard" id="nav-dashboard">
+                    <i class="fa-solid fa-chart-line"></i>
+                    <span>Dashboard</span>
+                </button>
+                <button class="nav-item" data-page="player-analysis" id="nav-player-analysis">
+                    <i class="fa-solid fa-user-ninja"></i>
+                    <span>Player Analysis</span>
+                </button>
+                <button class="nav-item" data-page="coordinate-map" id="nav-coordinate-map">
+                    <i class="fa-solid fa-map-location-dot"></i>
+                    <span>2D Movement Map</span>
+                </button>
+                
+                <div class="nav-section-title">DETECTION & PIPELINE</div>
+                <button class="nav-item" data-page="detection-config" id="nav-detection-config">
+                    <i class="fa-solid fa-sliders"></i>
+                    <span>Run DBSCAN</span>
+                </button>
+                <button class="nav-item" data-page="results-table" id="nav-results-table">
+                    <i class="fa-solid fa-table-list"></i>
+                    <span>Results & Telemetry</span>
+                </button>
+                <button class="nav-item" data-page="theory-evaluation" id="nav-theory-evaluation">
+                    <i class="fa-solid fa-book-open"></i>
+                    <span>About DBSCAN & Evaluation</span>
+                </button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="project-pill">
+                    <div class="pulse-indicator"></div>
+                    <div>
+                        <div class="pill-label">SEMESTER PROJECT</div>
+                        <div class="pill-desc">Pattern Recognition & Anomaly</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Workspace -->
+        <div class="main-wrapper">
+            <!-- Top Navigation Header -->
+            <header class="top-header">
+                <div class="header-left">
+                    <button class="mobile-toggle" id="sidebar-toggle" title="Toggle Sidebar">
+                        <i class="fa-solid fa-bars"></i>
+                    </button>
+                    <div class="project-headline">
+                        <h1 class="main-title">Player Behavior Anomaly Detection Using DBSCAN</h1>
+                        <p class="problem-statement">
+                            <i class="fa-solid fa-quote-left"></i>
+                            Use DBSCAN to cluster in-game movement coordinate data and isolate potential automated aiming or cheating behavior in multiplayer games.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="header-actions">
+                    <div class="badge-item">
+                        <span class="badge-label">MODEL</span>
+                        <span class="badge-value neon-cyan">scikit-learn DBSCAN</span>
+                    </div>
+                    <div class="badge-item">
+                        <span class="badge-label">STATUS</span>
+                        <span class="badge-value neon-green" id="header-status">
+                            <i class="fa-solid fa-circle-check"></i> MODEL READY
+                        </span>
+                    </div>
+                    <button class="btn btn-secondary btn-sm" id="btn-refresh-all" title="Reload telemetry state">
+                        <i class="fa-solid fa-rotate"></i>
+                        <span>Refresh</span>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Page Container (Dynamic Tab View) -->
+            <main class="content-container">
+
+                <!-- 1. DASHBOARD PAGE -->
+                <section class="page-view active" id="page-dashboard">
+                    <!-- Overview Banner & Explanation -->
+                    <div class="alert-banner">
+                        <div class="banner-icon">
+                            <i class="fa-solid fa-circle-info"></i>
+                        </div>
+                        <div class="banner-content">
+                            <h4 class="banner-heading">Core Detection Principle</h4>
+                            <p class="banner-text">
+                                “DBSCAN identifies dense regions of normal player movement and classifies isolated movement points as potential anomalies.”
+                                In multiplayer gaming telemetry, legitimate players naturally cluster around tactical zones, choke points, and normal walking/sprinting speeds. Outliers in density space highlight potential automated aiming, speed manipulation, or coordinate jumps.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Metrics Cards Grid (6 required cards) -->
+                    <div class="cards-grid">
+                        <div class="card metric-card">
+                            <div class="metric-icon cyan">
+                                <i class="fa-solid fa-users"></i>
+                            </div>
+                            <div class="metric-data">
+                                <span class="metric-label">Total Players</span>
+                                <h3 class="metric-value" id="card-total-players">--</h3>
+                                <span class="metric-trend"><i class="fa-solid fa-gamepad"></i> Tracked telemetry</span>
+                            </div>
+                        </div>
+
+                        <div class="card metric-card">
+                            <div class="metric-icon purple">
+                                <i class="fa-solid fa-database"></i>
+                            </div>
+                            <div class="metric-data">
+                                <span class="metric-label">Total Movement Records</span>
+                                <h3 class="metric-value" id="card-total-records">--</h3>
+                                <span class="metric-trend"><i class="fa-solid fa-clock"></i> Coordinate samples</span>
+                            </div>
+                        </div>
+
+                        <div class="card metric-card">
+                            <div class="metric-icon green">
+                                <i class="fa-solid fa-shield-halved"></i>
+                            </div>
+                            <div class="metric-data">
+                                <span class="metric-label">Normal Movements</span>
+                                <h3 class="metric-value neon-green-text" id="card-normal-records">--</h3>
+                                <span class="metric-trend"><i class="fa-solid fa-check"></i> Dense cluster points</span>
+                            </div>
+                        </div>
+
+                        <div class="card metric-card">
+                            <div class="metric-icon rose">
+                                <i class="fa-solid fa-triangle-exclamation"></i>
+                            </div>
+                            <div class="metric-data">
+                                <span class="metric-label">Anomalous Movements</span>
+                                <h3 class="metric-value neon-rose-text" id="card-anomalous-records">--</h3>
+                                <span class="metric-trend"><i class="fa-solid fa-fingerprint"></i> DBSCAN Noise (-1)</span>
+                            </div>
+                        </div>
+
+                        <div class="card metric-card">
+                            <div class="metric-icon blue">
+                                <i class="fa-solid fa-diagram-project"></i>
+                            </div>
+                            <div class="metric-data">
+                                <span class="metric-label">Number of DBSCAN Clusters</span>
+                                <h3 class="metric-value" id="card-num-clusters">--</h3>
+                                <span class="metric-trend"><i class="fa-solid fa-network-wired"></i> Density partitions</span>
+                            </div>
+                        </div>
+
+                        <div class="card metric-card">
+                            <div class="metric-icon amber">
+                                <i class="fa-solid fa-percent"></i>
+                            </div>
+                            <div class="metric-data">
+                                <span class="metric-label">Anomaly Percentage</span>
+                                <h3 class="metric-value neon-amber-text" id="card-anomaly-pct">--%</h3>
+                                <span class="metric-trend" id="card-anomaly-sub">Noise to total ratio</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Dashboard Charts (4 required charts) -->
+                    <div class="charts-grid-2x2">
+                        <!-- Chart 1: Normal vs Anomalous -->
+                        <div class="card chart-card">
+                            <div class="card-header">
+                                <div class="header-info">
+                                    <h3 class="card-title"><i class="fa-solid fa-chart-pie"></i> Normal vs Anomalous Movements</h3>
+                                    <p class="card-subtitle">Binary classification based on DBSCAN density reachability</p>
+                                </div>
+                            </div>
+                            <div class="chart-wrapper donut-wrapper">
+                                <canvas id="chart-normal-vs-anomalies"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Chart 2: Cluster Distribution -->
+                        <div class="card chart-card">
+                            <div class="card-header">
+                                <div class="header-info">
+                                    <h3 class="card-title"><i class="fa-solid fa-chart-bar"></i> Cluster Distribution</h3>
+                                    <p class="card-subtitle">Sample count across discovered density partitions & noise</p>
+                                </div>
+                            </div>
+                            <div class="chart-wrapper">
+                                <canvas id="chart-cluster-distribution"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Chart 3: Player Movement Activity Over Time -->
+                        <div class="card chart-card">
+                            <div class="card-header">
+                                <div class="header-info">
+                                    <h3 class="card-title"><i class="fa-solid fa-wave-square"></i> Movement Activity Over Time</h3>
+                                    <p class="card-subtitle">Normal vs anomalous telemetry occurrences across game match ticks</p>
+                                </div>
+                            </div>
+                            <div class="chart-wrapper">
+                                <canvas id="chart-activity-timeline"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Chart 4: 2D Movement Coordinate Visualization Preview -->
+                        <div class="card chart-card">
+                            <div class="card-header">
+                                <div class="header-info">
+                                    <h3 class="card-title"><i class="fa-solid fa-braille"></i> 2D Movement Coordinate Map</h3>
+                                    <p class="card-subtitle">Spatial scatter plot showing clustered patrol paths and isolated noise</p>
+                                </div>
+                                <button class="btn btn-sm btn-outline" id="btn-view-full-map">Full Interactive View</button>
+                            </div>
+                            <div class="chart-wrapper">
+                                <canvas id="chart-coordinates-preview"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 2. PLAYER ANALYSIS PAGE -->
+                <section class="page-view" id="page-player-analysis">
+                    <div class="card page-control-card">
+                        <div class="control-row">
+                            <div class="control-item">
+                                <label for="player-select"><i class="fa-solid fa-user-astronaut"></i> Select Player ID:</label>
+                                <select id="player-select" class="form-select">
+                                    <option value="" disabled selected>Loading players...</option>
+                                </select>
+                            </div>
+                            <div class="player-suspicion-tag" id="player-suspicion-badge">
+                                <span class="badge-label">BEHAVIOR RATING:</span>
+                                <span class="badge-value" id="badge-suspicion-val">--</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Selected Player Statistics Cards -->
+                    <div class="cards-grid player-stats-grid">
+                        <div class="card metric-card mini">
+                            <span class="metric-label">Selected Player</span>
+                            <h3 class="metric-value small" id="pl-id">--</h3>
+                            <span class="metric-trend"><i class="fa-solid fa-id-badge"></i> Subject</span>
+                        </div>
+                        <div class="card metric-card mini">
+                            <span class="metric-label">Total Movements</span>
+                            <h3 class="metric-value" id="pl-total-movements">--</h3>
+                            <span class="metric-trend"><i class="fa-solid fa-shoe-prints"></i> Data points</span>
+                        </div>
+                        <div class="card metric-card mini">
+                            <span class="metric-label">Average Speed</span>
+                            <h3 class="metric-value" id="pl-avg-speed">-- <span class="unit">m/s</span></h3>
+                            <span class="metric-trend"><i class="fa-solid fa-gauge-simple"></i> Normal: 4-12 m/s</span>
+                        </div>
+                        <div class="card metric-card mini">
+                            <span class="metric-label">Maximum Speed</span>
+                            <h3 class="metric-value neon-amber-text" id="pl-max-speed">-- <span class="unit">m/s</span></h3>
+                            <span class="metric-trend"><i class="fa-solid fa-bolt"></i> Peak velocity</span>
+                        </div>
+                        <div class="card metric-card mini">
+                            <span class="metric-label">Avg Direction Change</span>
+                            <h3 class="metric-value" id="pl-avg-dir">--<span class="unit">°</span></h3>
+                            <span class="metric-trend"><i class="fa-solid fa-compass"></i> Angular delta</span>
+                        </div>
+                        <div class="card metric-card mini">
+                            <span class="metric-label">Anomalous Movements</span>
+                            <h3 class="metric-value neon-rose-text" id="pl-anomalous-movements">--</h3>
+                            <span class="metric-trend"><i class="fa-solid fa-triangle-exclamation"></i> Noise flags</span>
+                        </div>
+                        <div class="card metric-card mini">
+                            <span class="metric-label">Anomaly Percentage</span>
+                            <h3 class="metric-value" id="pl-anomaly-pct">--%</h3>
+                            <span class="metric-trend"><i class="fa-solid fa-percent"></i> Potential automated behavior</span>
+                        </div>
+                    </div>
+
+                    <!-- Player Movement Trajectory Path Chart -->
+                    <div class="card chart-card large-chart">
+                        <div class="card-header">
+                            <div class="header-info">
+                                <h3 class="card-title"><i class="fa-solid fa-route"></i> Player Movement Trajectory Path (X-Y Plane)</h3>
+                                <p class="card-subtitle">
+                                    Sequential navigation path. Connected lines display natural patrol movements. 
+                                    <span class="text-rose font-semibold"><i class="fa-solid fa-circle-dot"></i> Glowing red markers</span> highlight isolated anomalous points (unnatural speed or aim snapping).
+                                </p>
+                            </div>
+                        </div>
+                        <div class="chart-wrapper path-chart-wrapper">
+                            <canvas id="chart-player-path"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Telemetry Records Sample for this Player -->
+                    <div class="card table-card">
+                        <div class="card-header">
+                            <h3 class="card-title"><i class="fa-solid fa-list-check"></i> Player Telemetry Stream</h3>
+                            <p class="card-subtitle">Chronological ticks with extracted spatial coordinates and status</p>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Timestamp</th>
+                                        <th>X Coord</th>
+                                        <th>Y Coord</th>
+                                        <th>Speed (m/s)</th>
+                                        <th>Direction (°)</th>
+                                        <th>Cluster</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="player-telemetry-tbody">
+                                    <tr>
+                                        <td colspan="7" class="text-center text-muted">Select a player to load telemetry.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 3. MOVEMENT VISUALIZATION PAGE -->
+                <section class="page-view" id="page-coordinate-map">
+                    <div class="card page-control-card">
+                        <div class="control-row map-controls">
+                            <div class="map-controls-left">
+                                <h3 class="control-heading"><i class="fa-solid fa-map"></i> Global 2D Coordinate Map (Arena Overview)</h3>
+                                <p class="card-subtitle">Spatial distribution of all player movements colored by DBSCAN density cluster</p>
+                            </div>
+                            <div class="map-actions">
+                                <button class="btn btn-sm btn-secondary" id="btn-map-filter-all">Show All</button>
+                                <button class="btn btn-sm btn-rose" id="btn-map-filter-anomalies">Anomalies Only</button>
+                                <button class="btn btn-sm btn-outline" id="btn-reset-map-zoom"><i class="fa-solid fa-expand"></i> Reset View</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card chart-card large-chart">
+                        <div class="chart-legend-container" id="map-custom-legend">
+                            <!-- Dynamic cluster badges -->
+                        </div>
+                        <div class="chart-wrapper map-chart-wrapper">
+                            <canvas id="chart-full-map"></canvas>
+                        </div>
+                        <div class="map-notes">
+                            <div class="note-pill"><span class="color-dot dot-cyan"></span> Dense Clusters (0, 1, 2...): Regular movement zones (tactical objectives, standard corridors)</div>
+                            <div class="note-pill"><span class="color-dot dot-rose"></span> Noise / Anomaly (-1): Outliers, teleport jumps, or unnatural instantaneous turns</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 4. ANOMALY DETECTION PAGE (CONFIGURATION & PIPELINE) -->
+                <section class="page-view" id="page-detection-config">
+                    <div class="grid-2col">
+                        <!-- Left: Form Card -->
+                        <div class="card form-card">
+                            <div class="card-header">
+                                <div class="header-info">
+                                    <h3 class="card-title"><i class="fa-solid fa-gears"></i> DBSCAN Anomaly Detection Engine</h3>
+                                    <p class="card-subtitle">Configure hyperparameters and ingest multiplayer movement dataset</p>
+                                </div>
+                            </div>
+
+                            <form id="detection-form">
+                                <!-- Upload Section -->
+                                <div class="form-group">
+                                    <label class="form-label"><i class="fa-solid fa-file-csv"></i> Telemetry CSV Dataset:</label>
+                                    <div class="file-dropzone" id="file-dropzone">
+                                        <i class="fa-solid fa-cloud-arrow-up drop-icon"></i>
+                                        <p class="drop-text">Drag & drop a CSV dataset here, or <span class="highlight">browse</span></p>
+                                        <span class="file-name-display" id="selected-file-name">Default: data/player_movements.csv (Active)</span>
+                                        <input type="file" id="csv-file-input" accept=".csv" class="hidden-file-input">
+                                    </div>
+                                    <div class="dataset-schema-tip">
+                                        <strong>Required Columns:</strong> <code>player_id</code>, <code>timestamp</code>, <code>x</code>, <code>y</code>, <code>speed</code>, <code>direction</code>
+                                    </div>
+                                </div>
+
+                                <!-- Hyperparameters -->
+                                <div class="param-grid">
+                                    <div class="form-group">
+                                        <label for="param-eps" class="form-label">
+                                            Epsilon (eps):
+                                            <span class="param-tip" title="Maximum Euclidean distance in standardized feature space to consider points neighbors"><i class="fa-solid fa-circle-question"></i></span>
+                                        </label>
+                                        <div class="input-with-stepper">
+                                            <input type="number" id="param-eps" name="eps" step="0.05" min="0.1" max="5.0" value="0.5" class="form-input">
+                                            <span class="input-hint">Default: 0.5</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="param-min-samples" class="form-label">
+                                            Min Samples (min_samples):
+                                            <span class="param-tip" title="Minimum number of samples required within eps distance to constitute a core point"><i class="fa-solid fa-circle-question"></i></span>
+                                        </label>
+                                        <div class="input-with-stepper">
+                                            <input type="number" id="param-min-samples" name="min_samples" step="1" min="2" max="50" value="5" class="form-input">
+                                            <span class="input-hint">Default: 5</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Feature Space Info -->
+                                <div class="feature-info-box">
+                                    <span class="feature-label">Clustering Feature Vector:</span>
+                                    <div class="feature-tags">
+                                        <span class="tag">X Coordinate</span>
+                                        <span class="tag">Y Coordinate</span>
+                                        <span class="tag">Speed (m/s)</span>
+                                        <span class="tag">Direction (0-360°)</span>
+                                        <span class="tag tag-accent">StandardScaler Normalized</span>
+                                    </div>
+                                </div>
+
+                                <!-- Run Button -->
+                                <button type="submit" class="btn btn-primary btn-run-detection" id="btn-run-dbscan">
+                                    <i class="fa-solid fa-microchip"></i>
+                                    <span>RUN DBSCAN DETECTION</span>
+                                </button>
+                            </form>
+                        </div>
+
+                        <!-- Right: Pipeline Execution Flow -->
+                        <div class="card pipeline-card">
+                            <div class="card-header">
+                                <h3 class="card-title"><i class="fa-solid fa-network-wired"></i> Machine Learning Execution Pipeline</h3>
+                                <p class="card-subtitle">End-to-end unsupervised telemetry processing stages</p>
+                            </div>
+
+                            <div class="pipeline-steps-list">
+                                <div class="step-item" id="step-1">
+                                    <span class="step-num">1</span>
+                                    <div class="step-content">
+                                        <h4>Read CSV Telemetry</h4>
+                                        <p>Streams raw coordinate logs into memory</p>
+                                    </div>
+                                </div>
+                                <div class="step-item" id="step-2">
+                                    <span class="step-num">2</span>
+                                    <div class="step-content">
+                                        <h4>Validate Column Schema</h4>
+                                        <p>Checks player_id, timestamp, x, y, speed, direction</p>
+                                    </div>
+                                </div>
+                                <div class="step-item" id="step-3">
+                                    <span class="step-num">3</span>
+                                    <div class="step-content">
+                                        <h4>Missing Value Imputation</h4>
+                                        <p>Handles missing values and cleans corrupted values</p>
+                                    </div>
+                                </div>
+                                <div class="step-item" id="step-4">
+                                    <span class="step-num">4</span>
+                                    <div class="step-content">
+                                        <h4>Feature Selection</h4>
+                                        <p>Extracts numerical spatial and kinetic features</p>
+                                    </div>
+                                </div>
+                                <div class="step-item" id="step-5">
+                                    <span class="step-num">5</span>
+                                    <div class="step-content">
+                                        <h4>Feature Standardization</h4>
+                                        <p>Applies StandardScaler to balance spatial & velocity metrics</p>
+                                    </div>
+                                </div>
+                                <div class="step-item" id="step-6">
+                                    <span class="step-num">6</span>
+                                    <div class="step-content">
+                                        <h4>DBSCAN Fitting</h4>
+                                        <p>scikit-learn density clustering with eps & min_samples</p>
+                                    </div>
+                                </div>
+                                <div class="step-item" id="step-7">
+                                    <span class="step-num">7</span>
+                                    <div class="step-content">
+                                        <h4>Cluster Labeling</h4>
+                                        <p>Assigns cluster indices (0, 1, 2, ...)</p>
+                                    </div>
+                                </div>
+                                <div class="step-item" id="step-8">
+                                    <span class="step-num">8</span>
+                                    <div class="step-content">
+                                        <h4>Noise / Anomaly Isolation</h4>
+                                        <p>Identifies cluster label -1 as anomalous behavior</p>
+                                    </div>
+                                </div>
+                                <div class="step-item" id="step-9">
+                                    <span class="step-num">9</span>
+                                    <div class="step-content">
+                                        <h4>Anomaly Statistics Calculation</h4>
+                                        <p>Computes cluster distribution and player-level percentages</p>
+                                    </div>
+                                </div>
+                                <div class="step-item" id="step-10">
+                                    <span class="step-num">10</span>
+                                    <div class="step-content">
+                                        <h4>Automated Dashboard Update</h4>
+                                        <p>Refreshes telemetry charts, maps, and results table</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="academic-disclaimer">
+                                <i class="fa-solid fa-circle-exclamation text-amber"></i>
+                                <span>
+                                    <strong>Viva / Theoretical Clarification:</strong> DBSCAN produces density-based cluster labels, not a conventional posterior probability score. Anomaly status is determined by cluster label <code>-1</code> (density noise).
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 5. RESULTS PAGE -->
+                <section class="page-view" id="page-results-table">
+                    <!-- Summary Strip Above Table -->
+                    <div class="results-summary-strip">
+                        <div class="strip-item">
+                            <span class="strip-label">Total Records:</span>
+                            <span class="strip-val" id="res-total">--</span>
+                        </div>
+                        <div class="strip-item">
+                            <span class="strip-label">Normal Records:</span>
+                            <span class="strip-val neon-green-text" id="res-normal">--</span>
+                        </div>
+                        <div class="strip-item">
+                            <span class="strip-label">Anomalous Records:</span>
+                            <span class="strip-val neon-rose-text" id="res-anomalous">--</span>
+                        </div>
+                        <div class="strip-item">
+                            <span class="strip-label">Number of Clusters:</span>
+                            <span class="strip-val" id="res-clusters">--</span>
+                        </div>
+                        <div class="strip-item">
+                            <span class="strip-label">Anomaly Percentage:</span>
+                            <span class="strip-val neon-amber-text" id="res-pct">--%</span>
+                        </div>
+                    </div>
+
+                    <!-- Table Toolbar -->
+                    <div class="card table-card">
+                        <div class="table-toolbar">
+                            <div class="toolbar-search">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                                <input type="text" id="results-search-input" placeholder="Search Player ID or Timestamp..." class="search-input">
+                            </div>
+
+                            <div class="toolbar-filters">
+                                <div class="filter-group">
+                                    <label for="filter-status">Status:</label>
+                                    <select id="filter-status" class="filter-select">
+                                        <option value="ALL">All Statuses</option>
+                                        <option value="NORMAL">NORMAL Only</option>
+                                        <option value="ANOMALY">ANOMALY Only</option>
+                                    </select>
+                                </div>
+
+                                <div class="filter-group">
+                                    <label for="filter-player">Player:</label>
+                                    <select id="filter-player" class="filter-select">
+                                        <option value="ALL">All Players</option>
+                                    </select>
+                                </div>
+
+                                <div class="filter-group">
+                                    <label for="filter-page-size">Per Page:</label>
+                                    <select id="filter-page-size" class="filter-select">
+                                        <option value="25">25</option>
+                                        <option value="50" selected>50</option>
+                                        <option value="100">100</option>
+                                    </select>
+                                </div>
+
+                                <a href="/api/download-results" class="btn btn-outline btn-sm" id="btn-export-csv" download>
+                                    <i class="fa-solid fa-file-arrow-down"></i>
+                                    <span>Download Results as CSV</span>
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- Results Table -->
+                        <div class="table-responsive">
+                            <table class="data-table" id="main-results-table">
+                                <thead>
+                                    <tr>
+                                        <th class="sortable" data-sort="player_id">Player ID <i class="fa-solid fa-sort"></i></th>
+                                        <th class="sortable" data-sort="timestamp">Timestamp <i class="fa-solid fa-sort"></i></th>
+                                        <th class="sortable" data-sort="x">X Coord <i class="fa-solid fa-sort"></i></th>
+                                        <th class="sortable" data-sort="y">Y Coord <i class="fa-solid fa-sort"></i></th>
+                                        <th class="sortable" data-sort="speed">Speed (m/s) <i class="fa-solid fa-sort"></i></th>
+                                        <th class="sortable" data-sort="direction">Direction (°) <i class="fa-solid fa-sort"></i></th>
+                                        <th class="sortable" data-sort="cluster">Cluster <i class="fa-solid fa-sort"></i></th>
+                                        <th class="sortable" data-sort="status">Status <i class="fa-solid fa-sort"></i></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="results-table-body">
+                                    <tr>
+                                        <td colspan="8" class="text-center text-muted">Loading telemetry records...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Pagination Footer -->
+                        <div class="pagination-footer">
+                            <div class="pagination-info" id="pagination-info-text">
+                                Showing page 1 of 1
+                            </div>
+                            <div class="pagination-buttons">
+                                <button class="btn btn-sm btn-secondary" id="btn-page-prev" disabled>
+                                    <i class="fa-solid fa-chevron-left"></i> Previous
+                                </button>
+                                <span class="current-page-badge" id="current-page-display">1</span>
+                                <button class="btn btn-sm btn-secondary" id="btn-page-next">
+                                    Next <i class="fa-solid fa-chevron-right"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 6. ABOUT DBSCAN & EVALUATION SECTION -->
+                <section class="page-view" id="page-theory-evaluation">
+                    <!-- Theory Accordion / Cards -->
+                    <div class="section-heading-box">
+                        <h2 class="section-title"><i class="fa-solid fa-graduation-cap"></i> Theoretical Foundations & Viva Guide</h2>
+                        <p class="section-subtitle">Comprehensive explanation of DBSCAN concepts for college semester demonstration</p>
+                    </div>
+
+                    <div class="theory-cards-grid">
+                        <div class="card theory-card">
+                            <div class="theory-header">
+                                <div class="theory-icon"><i class="fa-solid fa-circle-nodes"></i></div>
+                                <h3>What is DBSCAN?</h3>
+                            </div>
+                            <p class="theory-body">
+                                <strong>DBSCAN</strong> stands for <em>Density-Based Spatial Clustering of Applications with Noise</em>. It is an unsupervised machine learning algorithm designed to identify clusters of arbitrary geometric shape in spatial data by detecting dense regions separated by regions of low point density.
+                            </p>
+                        </div>
+
+                        <div class="card theory-card">
+                            <div class="theory-header">
+                                <div class="theory-icon"><i class="fa-solid fa-ruler-combined"></i></div>
+                                <h3>What is Epsilon (eps)?</h3>
+                            </div>
+                            <p class="theory-body">
+                                <strong>Epsilon (eps)</strong> specifies the radius of the spherical neighborhood surrounding each point in the feature space. Two points are considered neighbors if the Euclidean distance between them is less than or equal to <code>eps</code>.
+                            </p>
+                        </div>
+
+                        <div class="card theory-card">
+                            <div class="theory-header">
+                                <div class="theory-icon"><i class="fa-solid fa-people-group"></i></div>
+                                <h3>What is min_samples?</h3>
+                            </div>
+                            <p class="theory-body">
+                                <strong>min_samples</strong> is the threshold parameter defining the minimum count of neighboring points (including the candidate point itself) required inside the <code>eps</code>-neighborhood for a point to qualify as a <strong>Core Point</strong>.
+                            </p>
+                        </div>
+
+                        <div class="card theory-card">
+                            <div class="theory-header">
+                                <div class="theory-icon"><i class="fa-solid fa-draw-polygon"></i></div>
+                                <h3>What is a Cluster?</h3>
+                            </div>
+                            <p class="theory-body">
+                                A <strong>Cluster</strong> is formed by a maximal set of density-connected points. Starting from any core point, all neighboring points within <code>eps</code> are included, expanding recursively across density-reachable nodes until boundary conditions are met.
+                            </p>
+                        </div>
+
+                        <div class="card theory-card">
+                            <div class="theory-header">
+                                <div class="theory-icon"><i class="fa-solid fa-bolt-lightning"></i></div>
+                                <h3>What is Noise?</h3>
+                            </div>
+                            <p class="theory-body">
+                                <strong>Noise</strong> (or Anomaly) consists of points that do not satisfy core point requirements and are not density-reachable from any core point. In scikit-learn, DBSCAN flags these isolated outliers with label <code>-1</code>.
+                            </p>
+                        </div>
+
+                        <div class="card theory-card">
+                            <div class="theory-header">
+                                <div class="theory-icon"><i class="fa-solid fa-shield-virus"></i></div>
+                                <h3>Why DBSCAN for Game Anomaly Detection?</h3>
+                            </div>
+                            <p class="theory-body">
+                                Unlike K-Means (which forces spherical clusters and assigns every point to a cluster), DBSCAN accommodates non-linear paths (walkways, corridors, objective sites) and <strong>naturally rejects density outliers</strong>. Unnatural teleports, speed hacks, and snap rotations fail density criteria and are automatically isolated.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Evaluation Section -->
+                    <div class="section-heading-box mt-3">
+                        <h2 class="section-title"><i class="fa-solid fa-chart-pie"></i> Model Evaluation & Structure Analysis</h2>
+                        <p class="section-subtitle">Quantitative assessment based on spatial density distribution</p>
+                    </div>
+
+                    <!-- Mandatory Viva Disclaimer -->
+                    <div class="evaluation-alert-box">
+                        <div class="eval-alert-icon">
+                            <i class="fa-solid fa-shield-halved"></i>
+                        </div>
+                        <div class="eval-alert-content">
+                            <h4>Academic Ground-Truth Evaluation Disclaimer</h4>
+                            <p class="eval-disclaimer-text">
+                                “Because the synthetic dataset does not contain verified ground-truth cheating labels, conventional classification accuracy cannot be reliably calculated. Evaluation is therefore based on clustering structure and detected noise/anomaly patterns.”
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="grid-2col evaluation-summary-grid">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title"><i class="fa-solid fa-list-check"></i> Telemetry Structure Metrics</h3>
+                            </div>
+                            <div class="eval-stats-list">
+                                <div class="eval-stat-row">
+                                    <span class="label">Number of Clusters Detected:</span>
+                                    <span class="val" id="eval-clusters">--</span>
+                                </div>
+                                <div class="eval-stat-row">
+                                    <span class="label">Total Noise / Anomaly Points:</span>
+                                    <span class="val text-rose" id="eval-noise">--</span>
+                                </div>
+                                <div class="eval-stat-row">
+                                    <span class="label">Global Anomaly Percentage:</span>
+                                    <span class="val text-amber" id="eval-pct">--%</span>
+                                </div>
+                                <div class="eval-stat-row">
+                                    <span class="label">Active Epsilon Parameter (eps):</span>
+                                    <span class="val" id="eval-eps">0.5</span>
+                                </div>
+                                <div class="eval-stat-row">
+                                    <span class="label">Min Samples Threshold (min_samples):</span>
+                                    <span class="val" id="eval-min-samples">5</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="card-title"><i class="fa-solid fa-chart-column"></i> Point Distribution Per Cluster</h3>
+                            </div>
+                            <div class="cluster-eval-list" id="eval-cluster-breakdown">
+                                <!-- Rendered dynamically -->
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </main>
+        </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- Application Script -->
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
